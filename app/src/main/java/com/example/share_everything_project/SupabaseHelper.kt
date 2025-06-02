@@ -6,6 +6,7 @@ import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.postgrest.query.Order
 import io.github.jan.supabase.postgrest.result.PostgrestResult
 import io.github.jan.supabase.storage.storage
+import io.github.jan.supabase.realtime.realtime
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -43,7 +44,8 @@ object SupabaseHelper {
                     receiver = message.getString("receiver"),
                     content = message.getString("content"),
                     type = message.getString("type"),
-                    timestamp = message.getLong("timestamp")
+                    timestamp = message.getLong("timestamp"),
+                    createdAt = message.optString("created_at", null)
                 )
                 
                 // Insert a list containing the single message
@@ -60,6 +62,9 @@ object SupabaseHelper {
     fun getMessages(client: SupabaseClient, user1: String, user2: String): List<Message> {
         return runBlocking {
             try {
+                // Enable real-time for the messages table
+                client.realtime.channel("public:messages").subscribe()
+                
                 // Get PostgrestResult with our query
                 val postgrestResult = client.postgrest["messages"]
                     .select {
@@ -83,9 +88,7 @@ object SupabaseHelper {
                         )
                     }
                 
-                // Now let's try to get the raw response string by reflection
                 try {
-                    // Use built-in decodeList method first
                     val messages = mutableListOf<Message>()
                     val supabaseMessages = postgrestResult.decodeList<MessageData>() 
                     
@@ -94,6 +97,7 @@ object SupabaseHelper {
                         messages.add(
                             Message(
                                 messageData.sender,
+                                messageData.receiver,
                                 messageData.content,
                                 messageData.type,
                                 messageData.timestamp
@@ -105,14 +109,12 @@ object SupabaseHelper {
                 } catch (e: Exception) {
                     println("Error parsing messages: ${e.message}")
                     e.printStackTrace()
-
-                    // Return empty list as fallback
                     return@runBlocking emptyList<Message>()
                 }
             } catch (e: Exception) {
                 println("Error getting messages: ${e.message}")
                 e.printStackTrace()
-                emptyList() // Return empty list on error
+                emptyList()
             }
         }
     }
@@ -126,6 +128,28 @@ object SupabaseHelper {
     fun getPublicUrl(client: SupabaseClient, bucket: String, fileName: String): String {
         return runBlocking {
             client.storage[bucket].publicUrl(fileName)
+        }
+    }
+
+    fun checkUserExists(client: SupabaseClient, phoneNumber: String): Boolean {
+        return runBlocking {
+            try {
+                // Query the users table to check if the phone number exists
+                val result = client.postgrest["users"]
+                    .select {
+                        filter {
+                            eq("phone_number", phoneNumber)
+                        }
+                    }
+                    .decodeList<Map<String, Any>>()
+                
+                // Return true if any user was found
+                result.isNotEmpty()
+            } catch (e: Exception) {
+                println("Error checking if user exists: ${e.message}")
+                e.printStackTrace()
+                false
+            }
         }
     }
 } 

@@ -63,11 +63,14 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime:2.6.2")
 
     // SUPABASE DEPENDENCIES
-    implementation("io.github.jan-tennert.supabase:postgrest-kt:2.1.0")
-    implementation("io.github.jan-tennert.supabase:storage-kt:2.1.0")
-    implementation("io.github.jan-tennert.supabase:supabase-kt:2.1.0")
+    implementation("io.github.jan-tennert.supabase:postgrest-kt:2.2.0")
+    implementation("io.github.jan-tennert.supabase:storage-kt:2.2.0")
+    implementation("io.github.jan-tennert.supabase:supabase-kt:2.2.0")
+    implementation("io.github.jan-tennert.supabase:realtime-kt:2.2.0")
+    implementation("io.github.jan-tennert.supabase:gotrue-kt:2.2.0")
     implementation("io.ktor:ktor-client-cio:2.3.7")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.2")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
     
     testImplementation(libs.junit)
     androidTestImplementation(libs.ext.junit)

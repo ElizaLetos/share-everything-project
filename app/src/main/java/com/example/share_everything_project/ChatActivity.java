@@ -1,110 +1,116 @@
 package com.example.share_everything_project;
 
-import android.content.ClipData;
+import android.Manifest;
+import android.annotation.SuppressLint;
 import android.content.Intent;
-import android.graphics.Bitmap;
+import android.database.Cursor;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
+import android.provider.OpenableColumns;
 import android.util.Log;
-import android.view.*;
+import android.view.View;
 import android.widget.*;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
-import androidx.annotation.NonNull;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
-
 import java.io.InputStream;
-import java.util.*;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import org.json.JSONObject;
 
 public class ChatActivity extends AppCompatActivity {
-
+    private static final int PERMISSIONS_REQUEST_SEND_SMS = 200;
     private EditText messageEditText;
-    private ImageButton sendButton, fileButton, shareButton, backButton;
+    private ImageButton sendButton;
+    private ImageButton fileButton;
+    private ImageButton shareButton;
+    private ImageButton backButton;
     private TextView chatTitleText;
     private LinearLayout selectionActionsLayout;
-    private Button shareSelectedButton, qrSelectedButton, cancelSelectionButton;
+    private Button shareSelectedButton;
+    private Button qrSelectedButton;
+    private Button cancelSelectionButton;
     private RecyclerView messagesRecyclerView;
     private MessageAdapter adapter;
-    private List<Message> messageList = new ArrayList<>();
+    private ArrayList<Message> messageList;
     private ChatViewModel viewModel;
-    private String username, otherUser;
+    private String username;
+    private String otherUser;
+    private String phoneNumber;
     private String lastContent = ""; // Store last message for sharing
+    private String currentUsername;
 
-    public String getUsername() {
-        return username;
-    }
-
-    private final ActivityResultLauncher<Intent> filePickerLauncher =
-            registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {
-                if (result.getResultCode() == RESULT_OK && result.getData() != null) {
-                    ClipData clipData = result.getData().getClipData();
-                    if (clipData != null) {
-                        for (int i = 0; i < clipData.getItemCount(); i++) {
-                            Uri fileUri = clipData.getItemAt(i).getUri();
-                            uploadFileToSupabase(fileUri);
-                        }
-                    } else {
-                        Uri fileUri = result.getData().getData();
-                        if (fileUri != null) {
-                            uploadFileToSupabase(fileUri);
-                        }
+    private final ActivityResultLauncher<Intent> filePickerLauncher = registerForActivityResult(
+        new ActivityResultContracts.StartActivityForResult(),
+        result -> {
+            if (result.getResultCode() == RESULT_OK && result.getData() != null) {
+                String messageText = messageEditText.getText().toString().trim();
+                boolean hasMessage = !messageText.isEmpty();
+                
+                if (result.getData().getClipData() != null) {
+                    // Multiple files selected
+                    for (int i = 0; i < result.getData().getClipData().getItemCount(); i++) {
+                        Uri fileUri = result.getData().getClipData().getItemAt(i).getUri();
+                        uploadFileToSupabase(fileUri, hasMessage ? messageText : null);
+                    }
+                } else {
+                    Uri fileUri = result.getData().getData();
+                    if (fileUri != null) {
+                        uploadFileToSupabase(fileUri, hasMessage ? messageText : null);
                     }
                 }
-            });
+                
+                // Clear message text if it was sent with files
+                if (hasMessage) {
+                    messageEditText.setText("");
+                }
+            }
+        }
+    );
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_chat);
 
-        // Get intent extras
-        Intent intent = getIntent();
-        if (intent == null) {
-            Log.e("ChatActivity", "Intent is null");
-            finish();
-            return;
-        }
+        // Get the passed data
+        username = getIntent().getStringExtra("username");
+        if (username == null) throw new IllegalStateException("Username is required");
+        currentUsername = username; // Set both variables to ensure consistency
+        otherUser = getIntent().getStringExtra("otherUser");
+        if (otherUser == null) throw new IllegalStateException("Other user is required");
+        boolean isAppUser = getIntent().getBooleanExtra("isAppUser", false);
+        phoneNumber = getIntent().getStringExtra("phoneNumber");
 
-        username = intent.getStringExtra("username");
-        otherUser = intent.getStringExtra("otherUser");
-
-        if (username == null || otherUser == null) {
-            Log.e("ChatActivity", "Required data missing - username: " + username + ", otherUser: " + otherUser);
-            Toast.makeText(this, "Error: Missing required data", Toast.LENGTH_SHORT).show();
-            finish();
-            return;
-        }
-
-        Log.d("ChatActivity", "Initializing chat - username: " + username + ", otherUser: " + otherUser);
-
-        // Initialize UI elements
+        // Initialize all views first
         initializeViews();
+
+        // Set up toolbar
+        Toolbar toolbar = findViewById(R.id.chatToolbar);
+        setSupportActionBar(toolbar);
+        if (getSupportActionBar() != null) {
+            getSupportActionBar().setTitle(otherUser);
+            getSupportActionBar().setDisplayHomeAsUpEnabled(true);
+            getSupportActionBar().setDisplayShowHomeEnabled(true);
+        }
         
-        // Set up toolbar title with the other user's name
-        if (chatTitleText != null) {
-            chatTitleText.setText(otherUser);
-        }
-
-        // Initialize RecyclerView and adapter
+        // Initialize RecyclerView
+        messageList = new ArrayList<>();
         adapter = new MessageAdapter(messageList, this);
-        adapter.setSelectionListener(() -> {
-            if (selectionActionsLayout != null) {
-                selectionActionsLayout.setVisibility(View.VISIBLE);
-            }
-        });
+        messagesRecyclerView.setLayoutManager(new LinearLayoutManager(this));
+        messagesRecyclerView.setAdapter(adapter);
 
-        if (messagesRecyclerView != null) {
-            messagesRecyclerView.setLayoutManager(new LinearLayoutManager(this));
-            messagesRecyclerView.setAdapter(adapter);
-        }
+        // Set up click listeners
+        setupClickListeners();
 
-        // Initialize ViewModel (will be refactored for Supabase)
+        // Initialize ViewModel
         try {
             viewModel = new ViewModelProvider(this).get(ChatViewModel.class);
             viewModel.loadMessages(username, otherUser);
@@ -123,9 +129,6 @@ public class ChatActivity extends AppCompatActivity {
             finish();
             return;
         }
-
-        // Set up click listeners
-        setupClickListeners();
     }
 
     private void initializeViews() {
@@ -136,85 +139,66 @@ public class ChatActivity extends AppCompatActivity {
         
         // Message composing elements
         messageEditText = findViewById(R.id.messageEditText);
+        sendButton = findViewById(R.id.sendButton);
+        fileButton = findViewById(R.id.fileButton);
+        shareButton = findViewById(R.id.shareButton);
+        
+        // Selection action buttons
         selectionActionsLayout = findViewById(R.id.selectionActionsLayout);
         shareSelectedButton = findViewById(R.id.shareSelectedButton);
         qrSelectedButton = findViewById(R.id.qrSelectedButton);
         cancelSelectionButton = findViewById(R.id.cancelSelectionButton);
-        sendButton = findViewById(R.id.sendButton);
-        fileButton = findViewById(R.id.fileButton);
-        shareButton = findViewById(R.id.shareButton);
+        
+        // RecyclerView for messages
         messagesRecyclerView = findViewById(R.id.messagesRecyclerView);
+        
+        // Set initial visibility
+        selectionActionsLayout.setVisibility(View.GONE);
     }
 
     private void setupClickListeners() {
-        // Set up back button click listener
-        if (backButton != null) {
-            backButton.setOnClickListener(v -> {
-                // Navigate back to the contacts list
-                onBackPressed();
-            });
-        }
-        
-        if (sendButton != null) {
-            sendButton.setOnClickListener(v -> {
-                if (messageEditText != null) {
-                    String text = messageEditText.getText().toString().trim();
-                    if (!text.isEmpty()) {
-                        lastContent = text; // Store for sharing
-                        sendMessageToSupabase(username, otherUser, text);
-                        messageEditText.setText("");
-                    }
-                }
-            });
-        }
+        // Set up send button
+        sendButton.setOnClickListener(v -> {
+            String message = messageEditText.getText().toString().trim();
+            if (!message.isEmpty()) {
+                sendInAppMessage(message);
+                messageEditText.setText("");
+            }
+        });
 
-        if (fileButton != null) {
-            fileButton.setOnClickListener(v -> openFilePicker());
-        }
+        // Set up file button
+        fileButton.setOnClickListener(v -> openFilePicker());
 
-        if (shareButton != null) {
-            shareButton.setOnClickListener(v -> {
-                String text = messageEditText.getText().toString().trim();
-                if (!text.isEmpty()) {
-                    // Share current text input
-                    shareContent(text);
-                } else if (!lastContent.isEmpty()) {
-                    // Share last sent message
-                    shareContent(lastContent);
-                } else {
-                    // No content to share
-                    Toast.makeText(this, "Nothing to share", Toast.LENGTH_SHORT).show();
-                }
-            });
-        }
+        // Set up share button
+        shareButton.setOnClickListener(v -> {
+            String text = messageEditText.getText().toString().trim();
+            if (!text.isEmpty()) {
+                shareContent(text);
+            } else if (!lastContent.isEmpty()) {
+                shareContent(lastContent);
+            } else {
+                Toast.makeText(this, "Nothing to share", Toast.LENGTH_SHORT).show();
+            }
+        });
 
-        if (shareSelectedButton != null) {
-            shareSelectedButton.setOnClickListener(v -> shareSelectedMessages());
-        }
+        // Set up selection action buttons
+        shareSelectedButton.setOnClickListener(v -> shareSelectedMessages());
+        qrSelectedButton.setOnClickListener(v -> showQRForSelection());
+        cancelSelectionButton.setOnClickListener(v -> {
+            adapter.clearSelection();
+            selectionActionsLayout.setVisibility(View.GONE);
+        });
 
-        if (qrSelectedButton != null) {
-            qrSelectedButton.setOnClickListener(v -> showQRForSelection());
-        }
-
-        if (cancelSelectionButton != null) {
-            cancelSelectionButton.setOnClickListener(v -> {
-                if (adapter != null && selectionActionsLayout != null) {
-                    adapter.clearSelection();
-                    selectionActionsLayout.setVisibility(View.GONE);
-                }
-            });
-        }
+        // Set up back button
+        backButton.setOnClickListener(v -> onBackPressed());
     }
 
-    // Handle back button press - same behavior as pressing the back button in UI
     @Override
     public void onBackPressed() {
         // If selection mode is active, cancel selection instead of going back
         if (adapter != null && adapter.isInSelectionMode()) {
             adapter.clearSelection();
-            if (selectionActionsLayout != null) {
-                selectionActionsLayout.setVisibility(View.GONE);
-            }
+            selectionActionsLayout.setVisibility(View.GONE);
             return;
         }
         
@@ -237,54 +221,96 @@ public class ChatActivity extends AppCompatActivity {
         }
     }
 
-    private void sendMessageToSupabase(String sender, String receiver, String text) {
-        io.github.jan.supabase.SupabaseClient client = SupabaseClientProvider.INSTANCE.getClient();
+    private void sendInAppMessage(String message) {
+        // Create a new message
+        Message newMessage = new Message(username, otherUser, message, "text", System.currentTimeMillis());
+        
+        // Add message to the list
+        messageList.add(newMessage);
+        adapter.notifyDataSetChanged();
+        messagesRecyclerView.scrollToPosition(messageList.size() - 1);
+        
+        // Store message in Supabase
         new Thread(() -> {
             try {
+                var client = SupabaseClientProvider.INSTANCE.getClient();
+                
+                // Create message JSON matching database schema
                 JSONObject messageJson = new JSONObject();
-                messageJson.put("sender", sender);
-                messageJson.put("receiver", receiver);
-                messageJson.put("content", text);
+                messageJson.put("sender", username);
+                messageJson.put("receiver", otherUser);
+                messageJson.put("content", message);
                 messageJson.put("type", "text");
                 messageJson.put("timestamp", System.currentTimeMillis());
                 
-                Log.d("ChatActivity", "Sending message: " + messageJson.toString());
-                SupabaseHelper.INSTANCE.insertMessage(client, messageJson);
+                // Format timestamp in ISO 8601 with timezone for timestamptz
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    ZonedDateTime now = ZonedDateTime.now();
+                    messageJson.put("created_at", now.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME));
+                }
+                
+                // Insert message into Supabase using Kotlin wrapper
+                SupabaseWrapper.insertMessage(client, messageJson);
+                
+                // Reload messages to ensure everything is in sync
                 runOnUiThread(() -> {
-                    Log.d("ChatActivity", "Message sent to Supabase");
-                    // Reload messages after sending
                     viewModel.loadMessages(username, otherUser);
+                    Toast.makeText(this, "Message sent to " + otherUser, Toast.LENGTH_SHORT).show();
                 });
             } catch (Exception e) {
                 Log.e("ChatActivity", "Error sending message", e);
-                e.printStackTrace();
-                runOnUiThread(() -> Toast.makeText(this, "Failed to send message: " + e.getMessage(), Toast.LENGTH_SHORT).show());
+                runOnUiThread(() -> 
+                    Toast.makeText(this, "Failed to send message: " + e.getMessage(), Toast.LENGTH_SHORT).show()
+                );
             }
         }).start();
     }
 
-    private void uploadFileToSupabase(Uri fileUri) {
-        io.github.jan.supabase.SupabaseClient client = SupabaseClientProvider.INSTANCE.getClient();
+    private void uploadFileToSupabase(Uri fileUri, String messageText) {
         new Thread(() -> {
             try {
-                InputStream inputStream = getContentResolver().openInputStream(fileUri);
-                byte[] fileBytes = new byte[inputStream.available()];
-                inputStream.read(fileBytes);
-                inputStream.close();
-                String fileName = UUID.randomUUID().toString();
-                SupabaseHelper.INSTANCE.uploadFile(client, "chat-files", fileName, fileBytes);
-                String fileUrl = SupabaseHelper.INSTANCE.getPublicUrl(client, "chat-files", fileName);
+                var client = SupabaseClientProvider.INSTANCE.getClient();
+                
+                // Generate a unique filename
+                String fileName = "file_" + System.currentTimeMillis() + "_" + getFileName(fileUri);
+                
+                // Convert Uri to ByteArray
+                byte[] fileBytes;
+                try (InputStream inputStream = getContentResolver().openInputStream(fileUri)) {
+                    if (inputStream == null) throw new Exception("Could not open file input stream");
+                    fileBytes = new byte[inputStream.available()];
+                    inputStream.read(fileBytes);
+                }
+                
+                // Upload file to Supabase storage using Kotlin wrapper
+                SupabaseWrapper.uploadFile(client, "chat-files", fileName, fileBytes);
+                
+                // Get the public URL for the uploaded file
+                String fileUrl = SupabaseWrapper.getPublicUrl(client, "chat-files", fileName);
                 
                 // Store last uploaded file URL for sharing
                 lastContent = fileUrl;
                 
-                JSONObject messageJson = new JSONObject();
-                messageJson.put("sender", username);
-                messageJson.put("receiver", otherUser);
-                messageJson.put("content", fileUrl);
-                messageJson.put("type", "file");
-                messageJson.put("timestamp", System.currentTimeMillis());
-                SupabaseHelper.INSTANCE.insertMessage(client, messageJson);
+                // If there's a message, send it first
+                if (messageText != null && !messageText.isEmpty()) {
+                    JSONObject textMessageJson = new JSONObject();
+                    textMessageJson.put("sender", username);
+                    textMessageJson.put("receiver", otherUser);
+                    textMessageJson.put("content", messageText);
+                    textMessageJson.put("type", "text");
+                    textMessageJson.put("timestamp", System.currentTimeMillis());
+                    SupabaseWrapper.insertMessage(client, textMessageJson);
+                }
+                
+                // Send the file message
+                JSONObject fileMessageJson = new JSONObject();
+                fileMessageJson.put("sender", username);
+                fileMessageJson.put("receiver", otherUser);
+                fileMessageJson.put("content", fileUrl);
+                fileMessageJson.put("type", "file");
+                fileMessageJson.put("timestamp", System.currentTimeMillis());
+                SupabaseWrapper.insertMessage(client, fileMessageJson);
+                
                 runOnUiThread(() -> {
                     Log.d("ChatActivity", "File uploaded and message sent to Supabase");
                     // Reload messages after sending
@@ -294,15 +320,37 @@ public class ChatActivity extends AppCompatActivity {
                     showShareFileDialog(fileUrl);
                 });
             } catch (Exception e) {
-                runOnUiThread(() -> Toast.makeText(this, "Failed to upload file: " + e.getMessage(), Toast.LENGTH_SHORT).show());
+                runOnUiThread(() -> 
+                    Toast.makeText(this, "Failed to upload file: " + e.getMessage(), Toast.LENGTH_SHORT).show()
+                );
             }
         }).start();
+    }
+
+    @SuppressLint("Range")
+    private String getFileName(Uri uri) {
+        String result = null;
+        if (uri.getScheme().equals("content")) {
+            try (Cursor cursor = getContentResolver().query(uri, null, null, null, null)) {
+                if (cursor != null && cursor.moveToFirst()) {
+                    result = cursor.getString(cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME));
+                }
+            }
+        }
+        if (result == null) {
+            result = uri.getPath();
+            int cut = result != null ? result.lastIndexOf('/') : -1;
+            if (cut != -1) {
+                result = result.substring(cut + 1);
+            }
+        }
+        return result != null ? result : "unknown_file";
     }
 
     private void shareSelectedMessages() {
         if (adapter == null) return;
 
-        List<Message> selected = adapter.getSelectedMessages();
+        ArrayList<Message> selected = adapter.getSelectedMessages();
         ArrayList<Uri> fileUris = new ArrayList<>();
         StringBuilder textBuilder = new StringBuilder();
         boolean hasFiles = false;
@@ -310,30 +358,30 @@ public class ChatActivity extends AppCompatActivity {
 
         // Collect all selected message content
         for (Message msg : selected) {
-            if (msg.content != null) {
-                if ("file".equals(msg.type)) {
-                    hasFiles = true;
-                    try {
-                        fileUris.add(Uri.parse(msg.content));
-                    } catch (Exception e) {
-                        Log.e("ChatActivity", "Error parsing URI: " + msg.content, e);
-                    }
-                } else if ("text".equals(msg.type)) {
-                    hasText = true;
-                    textBuilder.append(msg.content).append("\n");
+            if (msg.getContent() != null) {
+                switch (msg.getType()) {
+                    case "file":
+                        hasFiles = true;
+                        try {
+                            fileUris.add(Uri.parse(msg.getContent()));
+                        } catch (Exception e) {
+                            Log.e("ChatActivity", "Error parsing URI: " + msg.getContent(), e);
+                        }
+                        break;
+                    case "text":
+                        hasText = true;
+                        textBuilder.append(msg.getContent()).append("\n");
+                        break;
                 }
             }
         }
 
         // Handle different sharing scenarios
         if (hasFiles && hasText) {
-            // Both files and text - ask user what to share
             showShareOptionsDialog(fileUris, textBuilder.toString().trim());
         } else if (hasFiles) {
-            // Only files
             shareFiles(fileUris);
         } else if (hasText) {
-            // Only text
             shareContent(textBuilder.toString().trim());
         } else {
             Toast.makeText(this, "No content to share!", Toast.LENGTH_SHORT).show();
@@ -343,39 +391,7 @@ public class ChatActivity extends AppCompatActivity {
         adapter.clearSelection();
         selectionActionsLayout.setVisibility(View.GONE);
     }
-    
-    // Dialog to choose what to share when both files and text are selected
-    private void showShareOptionsDialog(ArrayList<Uri> fileUris, String text) {
-        String[] options = {"Share Files", "Share Text", "Share Both", "Cancel"};
-        
-        AlertDialog.Builder builder = new AlertDialog.Builder(this);
-        builder.setTitle("What would you like to share?");
-        builder.setItems(options, (dialog, which) -> {
-            switch (which) {
-                case 0: // Share Files
-                    shareFiles(fileUris);
-                    break;
-                case 1: // Share Text
-                    shareContent(text);
-                    break;
-                case 2: // Share Both
-                    // Create a combined intent - text will be shared as EXTRA_TEXT
-                    Intent shareIntent = new Intent(Intent.ACTION_SEND_MULTIPLE);
-                    shareIntent.setType("*/*");
-                    shareIntent.putParcelableArrayListExtra(Intent.EXTRA_STREAM, fileUris);
-                    shareIntent.putExtra(Intent.EXTRA_TEXT, text);
-                    startActivity(Intent.createChooser(shareIntent, "Share via"));
-                    break;
-                case 3: // Cancel
-                    dialog.dismiss();
-                    break;
-            }
-        });
-        
-        builder.create().show();
-    }
-    
-    // Helper method to share multiple files
+
     private void shareFiles(ArrayList<Uri> uris) {
         if (uris.isEmpty()) {
             Toast.makeText(this, "No files to share", Toast.LENGTH_SHORT).show();
@@ -396,12 +412,12 @@ public class ChatActivity extends AppCompatActivity {
     private void showQRForSelection() {
         if (adapter == null) return;
 
-        List<Message> selected = adapter.getSelectedMessages();
+        ArrayList<Message> selected = adapter.getSelectedMessages();
         StringBuilder builder = new StringBuilder();
 
         for (Message msg : selected) {
-            if (msg.content != null) {
-                builder.append(msg.content).append("\n");
+            if (msg.getContent() != null) {
+                builder.append(msg.getContent()).append("\n");
             }
         }
 
@@ -413,10 +429,10 @@ public class ChatActivity extends AppCompatActivity {
                 qrImage.setImageBitmap(qrBitmap);
 
                 new AlertDialog.Builder(this)
-                        .setTitle("QR Code for sharing")
-                        .setView(qrImage)
-                        .setPositiveButton("OK", null)
-                        .show();
+                    .setTitle("QR Code for sharing")
+                    .setView(qrImage)
+                    .setPositiveButton("OK", null)
+                    .show();
             } catch (Exception e) {
                 Log.e("ChatActivity", "Error generating QR code", e);
                 Toast.makeText(this, "Error generating QR code", Toast.LENGTH_SHORT).show();
@@ -424,7 +440,6 @@ public class ChatActivity extends AppCompatActivity {
         }
     }
 
-    // Method to share content (text or file URL)
     private void shareContent(String content) {
         Intent shareIntent = new Intent(Intent.ACTION_SEND);
         
@@ -457,18 +472,34 @@ public class ChatActivity extends AppCompatActivity {
         startActivity(Intent.createChooser(shareIntent, "Share via"));
     }
     
-    // Dialog to prompt sharing after file upload
     private void showShareFileDialog(String fileUrl) {
-        AlertDialog.Builder builder = new AlertDialog.Builder(this);
-        builder.setTitle("File Uploaded");
-        builder.setMessage("Would you like to share this file with other apps?");
-        
-        builder.setPositiveButton("Share", (dialog, which) -> {
-            shareContent(fileUrl);
-        });
-        
-        builder.setNegativeButton("No", (dialog, which) -> dialog.dismiss());
-        
-        builder.create().show();
+        new AlertDialog.Builder(this)
+            .setTitle("File Uploaded")
+            .setMessage("Would you like to share this file with other apps?")
+            .setPositiveButton("Share", (dialog, which) -> shareContent(fileUrl))
+            .setNegativeButton("No", (dialog, which) -> dialog.dismiss())
+            .create()
+            .show();
     }
-}
+
+    private void showShareOptionsDialog(ArrayList<Uri> fileUris, String text) {
+        String[] options = {"Share Files", "Share Text", "Share Both"};
+        new AlertDialog.Builder(this)
+            .setTitle("What would you like to share?")
+            .setItems(options, (dialog, which) -> {
+                switch (which) {
+                    case 0:
+                        shareFiles(fileUris);
+                        break;
+                    case 1:
+                        shareContent(text);
+                        break;
+                    case 2:
+                        shareFiles(fileUris);
+                        shareContent(text);
+                        break;
+                }
+            })
+            .show();
+    }
+} 
