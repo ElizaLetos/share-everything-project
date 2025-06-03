@@ -36,6 +36,7 @@ import java.util.HashSet;
 import java.util.Set;
 
 import org.json.JSONObject;
+import org.json.JSONArray;
 
 import com.google.zxing.integration.android.IntentIntegrator;
 import com.google.zxing.integration.android.IntentResult;
@@ -248,18 +249,53 @@ public class MainActivity extends AppCompatActivity {
 
     private void loadConversations() {
         Log.d("MainActivity", "Loading conversations");
-        SharedPreferences prefs = getSharedPreferences("ShareHubPrefs", MODE_PRIVATE);
-        Set<String> savedConversations = prefs.getStringSet("conversations", new HashSet<>());
-        
-        // Clear and update list
-        conversationList.clear();
-        conversationList.addAll(savedConversations);
-        
-        // Update UI
-        runOnUiThread(() -> {
-            adapter.notifyDataSetChanged();
-            Log.d("MainActivity", "Loaded conversations size: " + conversationList.size());
-        });
+        new Thread(() -> {
+            try {
+                var client = SupabaseClientProvider.INSTANCE.getClient();
+                
+                // Fetch all conversations from Supabase
+                JSONArray response = SupabaseWrapper.fetchAllUserConversations(client, currentUsername);
+                Log.d("MainActivity", "Received conversations from Supabase: " + response.toString());
+                
+                // Process conversations and update UI
+                Set<String> uniqueConversations = new HashSet<>();
+                
+                for (int i = 0; i < response.length(); i++) {
+                    try {
+                        JSONObject messageJson = response.getJSONObject(i);
+                        String sender = messageJson.getString("sender");
+                        String receiver = messageJson.getString("receiver");
+                        
+                        // Add the other user to conversations
+                        String otherUser = sender.equals(currentUsername) ? receiver : sender;
+                        uniqueConversations.add(otherUser + "|app_user");
+                        
+                        Log.d("MainActivity", String.format(
+                            "Processing conversation - Sender: %s, Receiver: %s, Other User: %s",
+                            sender, receiver, otherUser
+                        ));
+                    } catch (Exception e) {
+                        Log.e("MainActivity", "Error processing conversation: " + e.getMessage(), e);
+                    }
+                }
+                
+                // Update conversation list
+                conversationList.clear();
+                conversationList.addAll(uniqueConversations);
+                
+                // Update UI on main thread
+                runOnUiThread(() -> {
+                    adapter.notifyDataSetChanged();
+                    Log.d("MainActivity", "Loaded conversations size: " + conversationList.size());
+                });
+                
+            } catch (Exception e) {
+                Log.e("MainActivity", "Error loading conversations: " + e.getMessage(), e);
+                runOnUiThread(() -> 
+                    Toast.makeText(this, "Error loading conversations", Toast.LENGTH_SHORT).show()
+                );
+            }
+        }).start();
     }
 
     private void showMyQRCode() {

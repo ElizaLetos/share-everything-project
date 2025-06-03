@@ -8,6 +8,7 @@ import org.json.JSONObject;
 import org.json.JSONArray;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Collections;
 
 public class ChatViewModel extends ViewModel {
     private final MutableLiveData<List<Message>> messages = new MutableLiveData<>();
@@ -31,6 +32,9 @@ public class ChatViewModel extends ViewModel {
                 for (int i = 0; i < response.length(); i++) {
                     try {
                         JSONObject messageJson = response.getJSONObject(i);
+                        Log.d("ChatViewModel", "Processing message: " + messageJson.toString());
+                        
+                        // Create Message object with all fields
                         Message msg = new Message(
                             messageJson.optString("id"),
                             messageJson.getString("sender"),
@@ -40,14 +44,27 @@ public class ChatViewModel extends ViewModel {
                             messageJson.getLong("timestamp"),
                             messageJson.optString("created_at")
                         );
+                        
+                        // Log message details for debugging
+                        Log.d("ChatViewModel", String.format(
+                            "Message details - Sender: %s, Receiver: %s, Content: %s",
+                            msg.getSender(),
+                            msg.getReceiver(),
+                            msg.getContent()
+                        ));
+                        
                         messageList.add(msg);
-                        Log.d("ChatViewModel", "Parsed message: " + messageJson.toString());
                     } catch (Exception e) {
                         Log.e("ChatViewModel", "Error parsing message: " + e.getMessage(), e);
                     }
                 }
                 
                 Log.d("ChatViewModel", "Total messages parsed: " + messageList.size());
+                
+                // Sort messages by timestamp to ensure correct order
+                Collections.sort(messageList, (m1, m2) -> 
+                    Long.compare(m1.getTimestamp(), m2.getTimestamp())
+                );
                 
                 // Update LiveData on the main thread
                 messages.postValue(messageList);
@@ -80,13 +97,17 @@ public class ChatViewModel extends ViewModel {
             user2,
             messageJson -> {
                 try {
+                    Log.d("ChatViewModel", "Received realtime message: " + messageJson.toString());
+                    
                     // Create a new Message object from the received data
                     Message newMessage = new Message(
+                        messageJson.optString("id"),
                         messageJson.getString("sender"),
                         messageJson.getString("receiver"),
                         messageJson.getString("content"),
                         messageJson.getString("type"),
-                        messageJson.getLong("timestamp")
+                        messageJson.getLong("timestamp"),
+                        messageJson.optString("created_at")
                     );
                     
                     // Get current messages and add the new one
@@ -94,10 +115,24 @@ public class ChatViewModel extends ViewModel {
                     if (currentMessages != null) {
                         List<Message> updatedMessages = new ArrayList<>(currentMessages);
                         updatedMessages.add(newMessage);
+                        
+                        // Sort messages by timestamp
+                        Collections.sort(updatedMessages, (m1, m2) -> 
+                            Long.compare(m1.getTimestamp(), m2.getTimestamp())
+                        );
+                        
+                        // Update LiveData on the main thread
                         messages.postValue(updatedMessages);
+                        Log.d("ChatViewModel", "Updated messages list size: " + updatedMessages.size());
+                    } else {
+                        // If no current messages, create new list with just this message
+                        List<Message> newMessages = new ArrayList<>();
+                        newMessages.add(newMessage);
+                        messages.postValue(newMessages);
+                        Log.d("ChatViewModel", "Created new messages list with size: 1");
                     }
                 } catch (Exception e) {
-                    Log.e("ChatViewModel", "Error handling realtime message: " + e.getMessage());
+                    Log.e("ChatViewModel", "Error handling realtime message: " + e.getMessage(), e);
                 }
                 return null;
             }

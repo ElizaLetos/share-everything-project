@@ -20,6 +20,48 @@ import org.json.JSONArray
 class SupabaseWrapper {
     companion object {
         @JvmStatic
+        fun fetchAllUserConversations(client: SupabaseClient, username: String): JSONArray {
+            try {
+                // Fetch all messages where the user is either sender or receiver
+                val response = runBlocking(Dispatchers.IO) {
+                    client.postgrest["messages"]
+                        .select {
+                            filter {
+                                or {
+                                    eq("sender", username)
+                                    eq("receiver", username)
+                                }
+                            }
+                            order("timestamp", Order.DESCENDING)
+                        }
+                        .decodeList<MessageData>()
+                }
+                
+                println("Supabase all conversations response size: ${response.size}")
+                
+                // Convert response to JSONArray
+                val jsonArray = JSONArray()
+                response.forEach { messageData ->
+                    println("Processing conversation message: sender=${messageData.sender}, receiver=${messageData.receiver}")
+                    val jsonObject = JSONObject().apply {
+                        put("id", messageData.id)
+                        put("sender", messageData.sender)
+                        put("receiver", messageData.receiver)
+                        put("content", messageData.content)
+                        put("type", messageData.type)
+                        put("timestamp", messageData.timestamp)
+                        put("created_at", messageData.createdAt)
+                    }
+                    jsonArray.put(jsonObject)
+                }
+                return jsonArray
+            } catch (e: Exception) {
+                e.printStackTrace()
+                return JSONArray()
+            }
+        }
+
+        @JvmStatic
         fun fetchMessages(client: SupabaseClient, user1: String, user2: String): JSONArray {
             try {
                 // Fetch messages from Supabase
@@ -43,9 +85,12 @@ class SupabaseWrapper {
                         .decodeList<MessageData>()
                 }
                 
+                println("Supabase conversation response size: ${response.size}")
+                
                 // Convert response to JSONArray
                 val jsonArray = JSONArray()
                 response.forEach { messageData ->
+                    println("Processing message: sender=${messageData.sender}, receiver=${messageData.receiver}")
                     val jsonObject = JSONObject().apply {
                         put("id", messageData.id)
                         put("sender", messageData.sender)
@@ -97,6 +142,7 @@ class SupabaseWrapper {
             onMessageReceived: (JSONObject) -> Unit
         ): RealtimeChannel {
             val channel = client.realtime.channel("public:messages")
+            println("Setting up realtime subscription for users: $user1 and $user2")
 
             // Set up the postgres change flow for INSERT events
             val changeFlow = channel.postgresChangeFlow<PostgresAction.Insert>(schema = "public") {
@@ -107,6 +153,8 @@ class SupabaseWrapper {
             changeFlow.onEach { insertAction ->
                 try {
                     val record = insertAction.record
+                    println("Received realtime message: $record")
+                    
                     val sender = record["sender"] as? String
                     val receiver = record["receiver"] as? String
 
@@ -114,9 +162,11 @@ class SupabaseWrapper {
                     if ((sender == user1 && receiver == user2) ||
                         (sender == user2 && receiver == user1)
                     ) {
+                        println("Message matches filter - Processing: sender=$sender, receiver=$receiver")
 
-                        // Convert the record to JSONObject
+                        // Convert the record to JSONObject with all fields
                         val messageJson = JSONObject().apply {
+                            put("id", record["id"])
                             put("sender", record["sender"])
                             put("receiver", record["receiver"])
                             put("content", record["content"])
@@ -125,9 +175,13 @@ class SupabaseWrapper {
                             put("created_at", record["created_at"])
                         }
 
+                        println("Sending message to callback: $messageJson")
                         onMessageReceived(messageJson)
+                    } else {
+                        println("Message does not match filter - Ignoring: sender=$sender, receiver=$receiver")
                     }
                 } catch (e: Exception) {
+                    println("Error in realtime subscription: ${e.message}")
                     e.printStackTrace()
                 }
             }.launchIn(CoroutineScope(Dispatchers.IO))
@@ -135,8 +189,11 @@ class SupabaseWrapper {
             // Subscribe to the channel
             CoroutineScope(Dispatchers.IO).launch {
                 try {
+                    println("Subscribing to realtime channel")
                     channel.subscribe()
+                    println("Successfully subscribed to realtime channel")
                 } catch (e: Exception) {
+                    println("Error subscribing to channel: ${e.message}")
                     e.printStackTrace()
                 }
             }

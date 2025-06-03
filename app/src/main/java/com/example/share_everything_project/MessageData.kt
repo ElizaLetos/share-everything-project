@@ -5,7 +5,7 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data class MessageData(
-    @SerialName("id") @JvmField val id: String? = null,
+    @SerialName("id") @JvmField val id: Int? = null,
     @SerialName("sender") @JvmField val sender: String,
     @SerialName("receiver") @JvmField val receiver: String,
     @SerialName("content") @JvmField val content: String,
