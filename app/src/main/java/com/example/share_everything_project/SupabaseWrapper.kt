@@ -149,14 +149,34 @@ class SupabaseWrapper {
                 table = "messages"
             }
 
+            // Subscribe to the channel first
+            CoroutineScope(Dispatchers.IO).launch {
+                try {
+                    println("Subscribing to realtime channel")
+                    channel.subscribe()
+                    println("Successfully subscribed to realtime channel")
+                } catch (e: Exception) {
+                    println("Error subscribing to channel: ${e.message}")
+                    e.printStackTrace()
+                }
+            }
+
             // Collect the flow and filter messages between the two users
             changeFlow.onEach { insertAction ->
                 try {
                     val record = insertAction.record
                     println("Received realtime message: $record")
                     
-                    val sender = record["sender"] as? String
-                    val receiver = record["receiver"] as? String
+                    // Properly access the record fields using the correct type casting
+                    val sender = record["sender"]?.toString()?.trim('"')
+                    val receiver = record["receiver"]?.toString()?.trim('"')
+                    val content = record["content"]?.toString()?.trim('"')
+                    val type = record["type"]?.toString()?.trim('"')
+                    val timestamp = (record["timestamp"] as? Number)?.toLong()
+                    val id = record["id"]?.toString()?.trim('"')
+                    val createdAt = record["created_at"]?.toString()?.trim('"')
+
+                    println("Parsed message fields - Sender: $sender, Receiver: $receiver")
 
                     // Check if the message matches our filter
                     if ((sender == user1 && receiver == user2) ||
@@ -166,13 +186,13 @@ class SupabaseWrapper {
 
                         // Convert the record to JSONObject with all fields
                         val messageJson = JSONObject().apply {
-                            put("id", record["id"])
-                            put("sender", record["sender"])
-                            put("receiver", record["receiver"])
-                            put("content", record["content"])
-                            put("type", record["type"])
-                            put("timestamp", record["timestamp"])
-                            put("created_at", record["created_at"])
+                            put("id", id)
+                            put("sender", sender)
+                            put("receiver", receiver)
+                            put("content", content)
+                            put("type", type)
+                            put("timestamp", timestamp ?: System.currentTimeMillis())  // Use current time as fallback
+                            put("created_at", createdAt)
                         }
 
                         println("Sending message to callback: $messageJson")
@@ -186,18 +206,6 @@ class SupabaseWrapper {
                 }
             }.launchIn(CoroutineScope(Dispatchers.IO))
 
-            // Subscribe to the channel
-            CoroutineScope(Dispatchers.IO).launch {
-                try {
-                    println("Subscribing to realtime channel")
-                    channel.subscribe()
-                    println("Successfully subscribed to realtime channel")
-                } catch (e: Exception) {
-                    println("Error subscribing to channel: ${e.message}")
-                    e.printStackTrace()
-                }
-            }
-
             return channel
         }
 
@@ -205,8 +213,11 @@ class SupabaseWrapper {
         fun unsubscribeFromChannel(channel: RealtimeChannel) {
             CoroutineScope(Dispatchers.IO).launch {
                 try {
+                    println("Unsubscribing from channel")
                     channel.unsubscribe()
+                    println("Successfully unsubscribed from channel")
                 } catch (e: Exception) {
+                    println("Error unsubscribing from channel: ${e.message}")
                     e.printStackTrace()
                 }
             }

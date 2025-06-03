@@ -272,9 +272,8 @@ public class ChatActivity extends AppCompatActivity {
                 // Insert message into Supabase using Kotlin wrapper
                 SupabaseWrapper.insertMessage(client, messageJson);
                 
-                // Reload messages to ensure everything is in sync
+                // Show success message
                 runOnUiThread(() -> {
-                    viewModel.loadMessages(username, otherUser);
                     Toast.makeText(this, "Message sent to " + otherUser, Toast.LENGTH_SHORT).show();
                 });
             } catch (Exception e) {
@@ -333,9 +332,6 @@ public class ChatActivity extends AppCompatActivity {
                 
                 runOnUiThread(() -> {
                     Log.d("ChatActivity", "File uploaded and message sent to Supabase");
-                    // Reload messages after sending
-                    viewModel.loadMessages(username, otherUser);
-                    
                     // Prompt to share the file
                     showShareFileDialog(fileUrl);
                 });

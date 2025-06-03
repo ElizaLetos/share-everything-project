@@ -84,11 +84,14 @@ public class ChatViewModel extends ViewModel {
         // Unsubscribe from any existing subscription
         if (subscription != null) {
             try {
+                Log.d("ChatViewModel", "Unsubscribing from existing channel");
                 SupabaseWrapper.unsubscribeFromChannel(subscription);
             } catch (Exception e) {
                 Log.e("ChatViewModel", "Error unsubscribing from channel: " + e.getMessage());
             }
         }
+
+        Log.d("ChatViewModel", "Setting up new realtime subscription for users: " + user1 + " and " + user2);
 
         // Set up new subscription using Kotlin wrapper
         subscription = SupabaseWrapper.setupRealtimeSubscription(
@@ -106,7 +109,7 @@ public class ChatViewModel extends ViewModel {
                         messageJson.getString("receiver"),
                         messageJson.getString("content"),
                         messageJson.getString("type"),
-                        messageJson.getLong("timestamp"),
+                        messageJson.optLong("timestamp", System.currentTimeMillis()),  // Use current time as fallback
                         messageJson.optString("created_at")
                     );
                     
@@ -114,16 +117,32 @@ public class ChatViewModel extends ViewModel {
                     List<Message> currentMessages = messages.getValue();
                     if (currentMessages != null) {
                         List<Message> updatedMessages = new ArrayList<>(currentMessages);
-                        updatedMessages.add(newMessage);
                         
-                        // Sort messages by timestamp
-                        Collections.sort(updatedMessages, (m1, m2) -> 
-                            Long.compare(m1.getTimestamp(), m2.getTimestamp())
-                        );
+                        // Check if message already exists to avoid duplicates
+                        boolean messageExists = false;
+                        for (Message msg : updatedMessages) {
+                            if (msg.getTimestamp() == newMessage.getTimestamp() &&
+                                msg.getSender().equals(newMessage.getSender()) &&
+                                msg.getContent().equals(newMessage.getContent())) {
+                                messageExists = true;
+                                break;
+                            }
+                        }
                         
-                        // Update LiveData on the main thread
-                        messages.postValue(updatedMessages);
-                        Log.d("ChatViewModel", "Updated messages list size: " + updatedMessages.size());
+                        if (!messageExists) {
+                            updatedMessages.add(newMessage);
+                            
+                            // Sort messages by timestamp
+                            Collections.sort(updatedMessages, (m1, m2) -> 
+                                Long.compare(m1.getTimestamp(), m2.getTimestamp())
+                            );
+                            
+                            // Update LiveData on the main thread
+                            messages.postValue(updatedMessages);
+                            Log.d("ChatViewModel", "Updated messages list size: " + updatedMessages.size());
+                        } else {
+                            Log.d("ChatViewModel", "Message already exists in list, skipping");
+                        }
                     } else {
                         // If no current messages, create new list with just this message
                         List<Message> newMessages = new ArrayList<>();
@@ -144,6 +163,7 @@ public class ChatViewModel extends ViewModel {
         super.onCleared();
         if (subscription != null) {
             try {
+                Log.d("ChatViewModel", "Clearing ViewModel, unsubscribing from channel");
                 SupabaseWrapper.unsubscribeFromChannel(subscription);
             } catch (Exception e) {
                 Log.e("ChatViewModel", "Error unsubscribing from channel in onCleared: " + e.getMessage());
