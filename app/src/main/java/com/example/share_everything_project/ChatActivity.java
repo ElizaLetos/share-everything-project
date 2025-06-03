@@ -4,6 +4,7 @@ import android.Manifest;
 import android.annotation.SuppressLint;
 import android.content.Intent;
 import android.database.Cursor;
+import android.graphics.Bitmap;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -103,9 +104,27 @@ public class ChatActivity extends AppCompatActivity {
         
         // Initialize RecyclerView
         messageList = new ArrayList<>();
-        adapter = new MessageAdapter(messageList, this);
+        adapter = new MessageAdapter(this, username);
+        adapter.setMessages(messageList);
         messagesRecyclerView.setLayoutManager(new LinearLayoutManager(this));
         messagesRecyclerView.setAdapter(adapter);
+
+        // Set up message selection listener
+        adapter.setOnMessageSelectedListener(new MessageAdapter.OnMessageSelectedListener() {
+            @Override
+            public void onMessageSelected(Message message) {
+                // Handle message selection
+                selectionActionsLayout.setVisibility(View.VISIBLE);
+            }
+
+            @Override
+            public void onFileOpen(Message message) {
+                // Handle file opening
+                if (message.getContent() != null && message.getContent().startsWith("http")) {
+                    shareContent(message.getContent());
+                }
+            }
+        });
 
         // Set up click listeners
         setupClickListeners();
@@ -196,6 +215,7 @@ public class ChatActivity extends AppCompatActivity {
     @Override
     public void onBackPressed() {
         // If selection mode is active, cancel selection instead of going back
+        super.onBackPressed();
         if (adapter != null && adapter.isInSelectionMode()) {
             adapter.clearSelection();
             selectionActionsLayout.setVisibility(View.GONE);

@@ -9,6 +9,7 @@ public class Message {
     private long timestamp;
     private String createdAt;
 
+    // Constructor for new messages (without id and createdAt)
     public Message(String sender, String receiver, String content, String type, long timestamp) {
         this.sender = sender;
         this.receiver = receiver;
@@ -17,6 +18,7 @@ public class Message {
         this.timestamp = timestamp;
     }
 
+    // Constructor for messages from database
     public Message(String id, String sender, String receiver, String content, String type, long timestamp, String createdAt) {
         this.id = id;
         this.sender = sender;
@@ -53,5 +55,18 @@ public class Message {
 
     public String getCreatedAt() {
         return createdAt;
+    }
+
+    @Override
+    public String toString() {
+        return "Message{" +
+                "id='" + id + '\'' +
+                ", sender='" + sender + '\'' +
+                ", receiver='" + receiver + '\'' +
+                ", content='" + content + '\'' +
+                ", type='" + type + '\'' +
+                ", timestamp=" + timestamp +
+                ", createdAt='" + createdAt + '\'' +
+                '}';
     }
 } 

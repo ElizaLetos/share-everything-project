@@ -15,14 +15,9 @@
         android:label="ShareHub Pro"
         android:icon="@drawable/app_icon">
 
-        <!-- MainActivity trebuie să aibă "exported" setat la true -->
+        <!-- MainActivity handles deep linking only -->
         <activity android:name=".MainActivity"
             android:exported="true">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN"/>
-                <category android:name="android.intent.category.LAUNCHER"/>
-            </intent-filter>
-            
             <!-- Deep linking configuration -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
@@ -36,9 +31,9 @@
 
         <!-- Ensure ChatActivity is declared -->
         <activity android:name=".ChatActivity"
-            android:exported="true" />
+            android:exported="false" />
 
-        <!-- LoginActivity trebuie să aibă intent-filter și "exported" setat la true -->
+        <!-- LoginActivity is the main entry point -->
         <activity android:name=".LoginActivity"
             android:exported="true">
             <intent-filter>

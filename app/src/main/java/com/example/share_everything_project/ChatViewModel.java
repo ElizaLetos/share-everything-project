@@ -5,6 +5,7 @@ import androidx.lifecycle.MutableLiveData;
 import androidx.lifecycle.ViewModel;
 import android.util.Log;
 import org.json.JSONObject;
+import org.json.JSONArray;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -21,49 +22,32 @@ public class ChatViewModel extends ViewModel {
             try {
                 var client = SupabaseClientProvider.INSTANCE.getClient();
                 
-                // Create a filter for messages between these two users
-                String filter = "(sender=eq." + user1 + " AND receiver=eq." + user2 + 
-                              ") OR (sender=eq." + user2 + " AND receiver=eq." + user1 + ")";
-                
-                // Fetch messages from Supabase
-                var response = client.postgrest
-                    .from("messages")
-                    .select()
-                    .filter(filter)
-                    .order("timestamp", true)
-                    .execute();
+                // Fetch messages using the Kotlin wrapper
+                JSONArray response = SupabaseWrapper.fetchMessages(client, user1, user2);
+                Log.d("ChatViewModel", "Received messages from Supabase: " + response.toString());
                 
                 // Parse the response and convert to Message objects
                 List<Message> messageList = new ArrayList<>();
-                if (response != null) {
-                    String responseStr = response.toString();
-                    // Remove the outer array brackets
-                    responseStr = responseStr.substring(1, responseStr.length() - 1);
-                    // Split by message objects
-                    String[] messageStrings = responseStr.split("(?<=}),");
-                    
-                    for (String messageStr : messageStrings) {
-                        try {
-                            // Clean up the message string
-                            messageStr = messageStr.trim();
-                            if (messageStr.endsWith(",")) {
-                                messageStr = messageStr.substring(0, messageStr.length() - 1);
-                            }
-                            
-                            JSONObject messageJson = new JSONObject(messageStr);
-                            Message msg = new Message(
-                                messageJson.getString("sender"),
-                                messageJson.getString("receiver"),
-                                messageJson.getString("content"),
-                                messageJson.getString("type"),
-                                messageJson.getLong("timestamp")
-                            );
-                            messageList.add(msg);
-                        } catch (Exception e) {
-                            Log.e("ChatViewModel", "Error parsing message: " + e.getMessage());
-                        }
+                for (int i = 0; i < response.length(); i++) {
+                    try {
+                        JSONObject messageJson = response.getJSONObject(i);
+                        Message msg = new Message(
+                            messageJson.optString("id"),
+                            messageJson.getString("sender"),
+                            messageJson.getString("receiver"),
+                            messageJson.getString("content"),
+                            messageJson.getString("type"),
+                            messageJson.getLong("timestamp"),
+                            messageJson.optString("created_at")
+                        );
+                        messageList.add(msg);
+                        Log.d("ChatViewModel", "Parsed message: " + messageJson.toString());
+                    } catch (Exception e) {
+                        Log.e("ChatViewModel", "Error parsing message: " + e.getMessage(), e);
                     }
                 }
+                
+                Log.d("ChatViewModel", "Total messages parsed: " + messageList.size());
                 
                 // Update LiveData on the main thread
                 messages.postValue(messageList);
@@ -72,7 +56,7 @@ public class ChatViewModel extends ViewModel {
                 setupRealtimeSubscription(client, user1, user2);
                 
             } catch (Exception e) {
-                Log.e("ChatViewModel", "Error loading messages: " + e.getMessage());
+                Log.e("ChatViewModel", "Error loading messages: " + e.getMessage(), e);
                 messages.postValue(new ArrayList<>());
             }
         }).start();
@@ -82,7 +66,11 @@ public class ChatViewModel extends ViewModel {
                                          String user1, String user2) {
         // Unsubscribe from any existing subscription
         if (subscription != null) {
-            subscription.close();
+            try {
+                SupabaseWrapper.unsubscribeFromChannel(subscription);
+            } catch (Exception e) {
+                Log.e("ChatViewModel", "Error unsubscribing from channel: " + e.getMessage());
+            }
         }
 
         // Set up new subscription using Kotlin wrapper
@@ -111,6 +99,7 @@ public class ChatViewModel extends ViewModel {
                 } catch (Exception e) {
                     Log.e("ChatViewModel", "Error handling realtime message: " + e.getMessage());
                 }
+                return null;
             }
         );
     }
@@ -119,7 +108,11 @@ public class ChatViewModel extends ViewModel {
     protected void onCleared() {
         super.onCleared();
         if (subscription != null) {
-            subscription.close();
+            try {
+                SupabaseWrapper.unsubscribeFromChannel(subscription);
+            } catch (Exception e) {
+                Log.e("ChatViewModel", "Error unsubscribing from channel in onCleared: " + e.getMessage());
+            }
         }
     }
 } 

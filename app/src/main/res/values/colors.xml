@@ -35,4 +35,11 @@
     <color name="button_send">#4CAF50</color>
     <color name="button_attach">#FF9800</color>
     <color name="button_share">#2196F3</color>
+    
+    <color name="purple_200">#FFBB86FC</color>
+    <color name="purple_500">#FF6200EE</color>
+    <color name="purple_700">#FF3700B3</color>
+    <color name="teal_200">#FF03DAC5</color>
+    <color name="teal_700">#FF018786</color>
+    <color name="selected_message_background">#33000000</color>
 </resources>

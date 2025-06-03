@@ -5,6 +5,7 @@ import io.github.jan.supabase.annotations.SupabaseExperimental
 import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.postgrest.query.Order
 import io.github.jan.supabase.postgrest.result.PostgrestResult
+import io.github.jan.supabase.realtime.channel
 import io.github.jan.supabase.storage.storage
 import io.github.jan.supabase.realtime.realtime
 import kotlinx.coroutines.runBlocking
@@ -21,17 +22,6 @@ private val jsonConfig = Json {
     isLenient = true
     coerceInputValues = true
 }
-
-@Serializable
-data class MessageData(
-    @JvmField val id: Int? = null,
-    @JvmField val sender: String,
-    @JvmField val receiver: String,
-    @JvmField val content: String,
-    @JvmField val type: String,
-    @JvmField val timestamp: Long,
-    @SerialName("created_at") @JvmField val createdAt: String? = null
-)
 
 @OptIn(SupabaseExperimental::class)
 object SupabaseHelper {
