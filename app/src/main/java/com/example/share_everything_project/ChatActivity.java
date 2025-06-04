@@ -34,10 +34,6 @@ public class ChatActivity extends AppCompatActivity {
     private ImageButton shareButton;
     private ImageButton backButton;
     private TextView chatTitleText;
-    private LinearLayout selectionActionsLayout;
-    private Button shareSelectedButton;
-    private Button qrSelectedButton;
-    private Button cancelSelectionButton;
     private RecyclerView messagesRecyclerView;
     private MessageAdapter adapter;
     private ArrayList<Message> messageList;
@@ -103,7 +99,6 @@ public class ChatActivity extends AppCompatActivity {
         }
         
         // Set chat title
-        chatTitleText = findViewById(R.id.chatTitleText);
         chatTitleText.setText(otherUser);
         
         // Initialize RecyclerView
@@ -113,20 +108,10 @@ public class ChatActivity extends AppCompatActivity {
         messagesRecyclerView.setLayoutManager(new LinearLayoutManager(this));
         messagesRecyclerView.setAdapter(adapter);
 
-        // Set up message selection listener
-        adapter.setOnMessageSelectedListener(new MessageAdapter.OnMessageSelectedListener() {
-            @Override
-            public void onMessageSelected(Message message) {
-                // Handle message selection
-                selectionActionsLayout.setVisibility(View.VISIBLE);
-            }
-
-            @Override
-            public void onFileOpen(Message message) {
-                // Handle file opening
-                if (message.getContent() != null && message.getContent().startsWith("http")) {
-                    shareContent(message.getContent());
-                }
+        // Set up file click listener
+        adapter.setOnFileClickListener(message -> {
+            if (message.getContent() != null && message.getContent().startsWith("http")) {
+                shareContent(message.getContent());
             }
         });
 
@@ -158,6 +143,7 @@ public class ChatActivity extends AppCompatActivity {
         // Toolbar and navigation components
         Toolbar toolbar = findViewById(R.id.chatToolbar);
         backButton = findViewById(R.id.backButton);
+        chatTitleText = findViewById(R.id.chatTitleText);
         
         // Message composing elements
         messageEditText = findViewById(R.id.messageEditText);
@@ -165,17 +151,8 @@ public class ChatActivity extends AppCompatActivity {
         fileButton = findViewById(R.id.fileButton);
         shareButton = findViewById(R.id.shareButton);
         
-        // Selection action buttons
-        selectionActionsLayout = findViewById(R.id.selectionActionsLayout);
-        shareSelectedButton = findViewById(R.id.shareSelectedButton);
-        qrSelectedButton = findViewById(R.id.qrSelectedButton);
-        cancelSelectionButton = findViewById(R.id.cancelSelectionButton);
-        
         // RecyclerView for messages
         messagesRecyclerView = findViewById(R.id.messagesRecyclerView);
-        
-        // Set initial visibility
-        selectionActionsLayout.setVisibility(View.GONE);
     }
 
     private void setupClickListeners() {
@@ -203,29 +180,15 @@ public class ChatActivity extends AppCompatActivity {
             }
         });
 
-        // Set up selection action buttons
-        shareSelectedButton.setOnClickListener(v -> shareSelectedMessages());
-        qrSelectedButton.setOnClickListener(v -> showQRForSelection());
-        cancelSelectionButton.setOnClickListener(v -> {
-            adapter.clearSelection();
-            selectionActionsLayout.setVisibility(View.GONE);
-        });
-
         // Set up back button
         backButton.setOnClickListener(v -> onBackPressed());
     }
 
     @Override
     public void onBackPressed() {
-        // If selection mode is active, cancel selection instead of going back
         super.onBackPressed();
-        if (adapter != null && adapter.isInSelectionMode()) {
-            adapter.clearSelection();
-            selectionActionsLayout.setVisibility(View.GONE);
-            return;
-        }
         
-        // Otherwise, navigate back to MainActivity (contacts list)
+        // Navigate back to MainActivity (contacts list)
         Intent intent = new Intent(this, MainActivity.class);
         intent.putExtra("username", username);
         startActivity(intent);
@@ -366,99 +329,6 @@ public class ChatActivity extends AppCompatActivity {
         return result != null ? result : "unknown_file";
     }
 
-    private void shareSelectedMessages() {
-        if (adapter == null) return;
-
-        ArrayList<Message> selected = adapter.getSelectedMessages();
-        ArrayList<Uri> fileUris = new ArrayList<>();
-        StringBuilder textBuilder = new StringBuilder();
-        boolean hasFiles = false;
-        boolean hasText = false;
-
-        // Collect all selected message content
-        for (Message msg : selected) {
-            if (msg.getContent() != null) {
-                switch (msg.getType()) {
-                    case "file":
-                        hasFiles = true;
-                        try {
-                            fileUris.add(Uri.parse(msg.getContent()));
-                        } catch (Exception e) {
-                            Log.e("ChatActivity", "Error parsing URI: " + msg.getContent(), e);
-                        }
-                        break;
-                    case "text":
-                        hasText = true;
-                        textBuilder.append(msg.getContent()).append("\n");
-                        break;
-                }
-            }
-        }
-
-        // Handle different sharing scenarios
-        if (hasFiles && hasText) {
-            showShareOptionsDialog(fileUris, textBuilder.toString().trim());
-        } else if (hasFiles) {
-            shareFiles(fileUris);
-        } else if (hasText) {
-            shareContent(textBuilder.toString().trim());
-        } else {
-            Toast.makeText(this, "No content to share!", Toast.LENGTH_SHORT).show();
-        }
-        
-        // Clear selection after sharing
-        adapter.clearSelection();
-        selectionActionsLayout.setVisibility(View.GONE);
-    }
-
-    private void shareFiles(ArrayList<Uri> uris) {
-        if (uris.isEmpty()) {
-            Toast.makeText(this, "No files to share", Toast.LENGTH_SHORT).show();
-            return;
-        }
-        
-        try {
-            Intent shareIntent = new Intent(Intent.ACTION_SEND_MULTIPLE);
-            shareIntent.setType("*/*");
-            shareIntent.putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris);
-            startActivity(Intent.createChooser(shareIntent, "Share files via"));
-        } catch (Exception e) {
-            Log.e("ChatActivity", "Error sharing files", e);
-            Toast.makeText(this, "Error sharing files", Toast.LENGTH_SHORT).show();
-        }
-    }
-
-    private void showQRForSelection() {
-        if (adapter == null) return;
-
-        ArrayList<Message> selected = adapter.getSelectedMessages();
-        StringBuilder builder = new StringBuilder();
-
-        for (Message msg : selected) {
-            if (msg.getContent() != null) {
-                builder.append(msg.getContent()).append("\n");
-            }
-        }
-
-        String content = builder.toString().trim();
-        if (!content.isEmpty()) {
-            try {
-                Bitmap qrBitmap = QRUtils.generateQRCode(content);
-                ImageView qrImage = new ImageView(this);
-                qrImage.setImageBitmap(qrBitmap);
-
-                new AlertDialog.Builder(this)
-                    .setTitle("QR Code for sharing")
-                    .setView(qrImage)
-                    .setPositiveButton("OK", null)
-                    .show();
-            } catch (Exception e) {
-                Log.e("ChatActivity", "Error generating QR code", e);
-                Toast.makeText(this, "Error generating QR code", Toast.LENGTH_SHORT).show();
-            }
-        }
-    }
-
     private void shareContent(String content) {
         Intent shareIntent = new Intent(Intent.ACTION_SEND);
         
@@ -498,27 +368,6 @@ public class ChatActivity extends AppCompatActivity {
             .setPositiveButton("Share", (dialog, which) -> shareContent(fileUrl))
             .setNegativeButton("No", (dialog, which) -> dialog.dismiss())
             .create()
-            .show();
-    }
-
-    private void showShareOptionsDialog(ArrayList<Uri> fileUris, String text) {
-        String[] options = {"Share Files", "Share Text", "Share Both"};
-        new AlertDialog.Builder(this)
-            .setTitle("What would you like to share?")
-            .setItems(options, (dialog, which) -> {
-                switch (which) {
-                    case 0:
-                        shareFiles(fileUris);
-                        break;
-                    case 1:
-                        shareContent(text);
-                        break;
-                    case 2:
-                        shareFiles(fileUris);
-                        shareContent(text);
-                        break;
-                }
-            })
             .show();
     }
 } 

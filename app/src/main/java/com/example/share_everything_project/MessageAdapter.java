@@ -13,22 +13,17 @@ import androidx.recyclerview.widget.RecyclerView;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
-import java.util.Set;
 
 public class MessageAdapter extends RecyclerView.Adapter<MessageAdapter.MessageViewHolder> {
     private List<Message> messages = new ArrayList<>();
     private final Context context;
     private final String currentUserId;
     private final SimpleDateFormat dateFormat;
-    private OnMessageSelectedListener listener;
-    private Set<Message> selectedMessages = new HashSet<>();
-    private boolean isInSelectionMode = false;
+    private OnFileClickListener listener;
 
-    public interface OnMessageSelectedListener {
-        void onMessageSelected(Message message);
+    public interface OnFileClickListener {
         void onFileOpen(Message message);
     }
 
@@ -38,7 +33,7 @@ public class MessageAdapter extends RecyclerView.Adapter<MessageAdapter.MessageV
         this.dateFormat = new SimpleDateFormat("HH:mm", Locale.getDefault());
     }
 
-    public void setOnMessageSelectedListener(OnMessageSelectedListener listener) {
+    public void setOnFileClickListener(OnFileClickListener listener) {
         this.listener = listener;
     }
 
@@ -88,55 +83,6 @@ public class MessageAdapter extends RecyclerView.Adapter<MessageAdapter.MessageV
         } else {
             holder.fileButton.setVisibility(View.GONE);
         }
-
-        // Set selection state
-        holder.itemView.setSelected(selectedMessages.contains(message));
-        holder.itemView.setBackgroundResource(selectedMessages.contains(message) ? 
-            R.color.selected_message_background : android.R.color.transparent);
-
-        // Set click listeners
-        holder.itemView.setOnLongClickListener(v -> {
-            if (!isInSelectionMode) {
-                isInSelectionMode = true;
-                selectedMessages.clear();
-            }
-            toggleMessageSelection(message);
-            return true;
-        });
-
-        holder.itemView.setOnClickListener(v -> {
-            if (isInSelectionMode) {
-                toggleMessageSelection(message);
-            } else if (listener != null) {
-                listener.onMessageSelected(message);
-            }
-        });
-    }
-
-    private void toggleMessageSelection(Message message) {
-        if (selectedMessages.contains(message)) {
-            selectedMessages.remove(message);
-            if (selectedMessages.isEmpty()) {
-                isInSelectionMode = false;
-            }
-        } else {
-            selectedMessages.add(message);
-        }
-        notifyDataSetChanged();
-    }
-
-    public boolean isInSelectionMode() {
-        return isInSelectionMode;
-    }
-
-    public void clearSelection() {
-        isInSelectionMode = false;
-        selectedMessages.clear();
-        notifyDataSetChanged();
-    }
-
-    public ArrayList<Message> getSelectedMessages() {
-        return new ArrayList<>(selectedMessages);
     }
 
     @Override

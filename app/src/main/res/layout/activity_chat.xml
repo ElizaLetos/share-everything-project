@@ -50,45 +50,6 @@
         android:padding="12dp"
         android:clipToPadding="false" />
 
-    <!-- Selection actions toolbar with updated design -->
-    <LinearLayout
-        android:id="@+id/selectionActionsLayout"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:visibility="gone"
-        android:padding="8dp"
-        android:gravity="center"
-        android:background="@color/primary_light"
-        android:elevation="4dp">
-
-        <Button
-            android:id="@+id/shareSelectedButton"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Partajează"
-            android:layout_marginEnd="8dp"
-            android:backgroundTint="@color/button_share"
-            android:textColor="@color/white" />
-
-        <Button
-            android:id="@+id/qrSelectedButton"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Cod QR"
-            android:layout_marginEnd="8dp"
-            android:backgroundTint="@color/secondary"
-            android:textColor="@color/white" />
-
-        <Button
-            android:id="@+id/cancelSelectionButton"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Anulează"
-            android:backgroundTint="@color/text_secondary"
-            android:textColor="@color/white" />
-    </LinearLayout>
-
     <!-- Message composition bar with improved design -->
     <LinearLayout
         android:layout_width="match_parent"
