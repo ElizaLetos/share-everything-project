@@ -116,7 +116,10 @@ public class MainActivity extends AppCompatActivity {
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
         int id = item.getItemId();
-        if (id == R.id.action_import_contacts) {
+        if (id == android.R.id.home) {
+            onBackPressed();
+            return true;
+        } else if (id == R.id.action_import_contacts) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_CONTACTS)
                     == PackageManager.PERMISSION_GRANTED) {
                 importContacts();
@@ -383,7 +386,6 @@ public class MainActivity extends AppCompatActivity {
 
     private void handleScannedQRCode(String qrContent) {
         try {
-            // First try to parse as JSON
             try {
                 JSONObject userInfo = new JSONObject(qrContent);
                 if ("contact_add".equals(userInfo.getString("type"))) {
@@ -395,7 +397,6 @@ public class MainActivity extends AppCompatActivity {
                 Log.d("MainActivity", "QR content is not in JSON format, trying deep link format");
             }
 
-            // If not JSON, try deep link format
             if (qrContent.startsWith("sharehubpro://user/")) {
                 String username = qrContent.substring("sharehubpro://user/".length());
                 if (!username.isEmpty()) {
@@ -404,11 +405,23 @@ public class MainActivity extends AppCompatActivity {
                 }
             }
 
-            // If we get here, the QR code format is invalid
             Toast.makeText(this, "Invalid QR code format", Toast.LENGTH_SHORT).show();
         } catch (Exception e) {
             Log.e("MainActivity", "Error processing QR code", e);
             Toast.makeText(this, "Error processing QR code: " + e.getMessage(), Toast.LENGTH_SHORT).show();
         }
+    }
+
+    @Override
+    public void onBackPressed() {
+        new AlertDialog.Builder(this)
+            .setTitle("Exit App")
+            .setMessage("Are you sure you want to exit?")
+            .setPositiveButton("Yes", (dialog, which) -> {
+                super.onBackPressed();
+                finishAffinity();
+            })
+            .setNegativeButton("No", null)
+            .show();
     }
 }
