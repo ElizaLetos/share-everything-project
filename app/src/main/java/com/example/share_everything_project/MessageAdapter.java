@@ -5,6 +5,8 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageButton;
+import android.widget.LinearLayout;
+import android.widget.RelativeLayout;
 import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
@@ -56,14 +58,24 @@ public class MessageAdapter extends RecyclerView.Adapter<MessageAdapter.MessageV
         holder.messageText.setText(message.getContent());
         holder.timestampText.setText(dateFormat.format(new Date(message.getTimestamp())));
 
-        // Style based on sender
+        // Set message alignment and style
+        RelativeLayout.LayoutParams params = (RelativeLayout.LayoutParams) holder.messageContainer.getLayoutParams();
         if (isCurrentUser) {
+            // Current user's messages (align right)
+            params.addRule(RelativeLayout.ALIGN_PARENT_END);
+            params.removeRule(RelativeLayout.ALIGN_PARENT_START);
             holder.messageText.setBackgroundResource(R.drawable.bg_message_sent);
             holder.messageText.setTextColor(context.getResources().getColor(android.R.color.white));
+            holder.timestampText.setTextAlignment(View.TEXT_ALIGNMENT_VIEW_END);
         } else {
+            // Other user's messages (align left)
+            params.addRule(RelativeLayout.ALIGN_PARENT_START);
+            params.removeRule(RelativeLayout.ALIGN_PARENT_END);
             holder.messageText.setBackgroundResource(R.drawable.bg_message_received);
             holder.messageText.setTextColor(context.getResources().getColor(android.R.color.black));
+            holder.timestampText.setTextAlignment(View.TEXT_ALIGNMENT_VIEW_START);
         }
+        holder.messageContainer.setLayoutParams(params);
 
         // Handle file messages
         if ("file".equals(message.getType())) {
@@ -82,7 +94,7 @@ public class MessageAdapter extends RecyclerView.Adapter<MessageAdapter.MessageV
         holder.itemView.setBackgroundResource(selectedMessages.contains(message) ? 
             R.color.selected_message_background : android.R.color.transparent);
 
-        // Set click listener for message selection
+        // Set click listeners
         holder.itemView.setOnLongClickListener(v -> {
             if (!isInSelectionMode) {
                 isInSelectionMode = true;
@@ -141,9 +153,11 @@ public class MessageAdapter extends RecyclerView.Adapter<MessageAdapter.MessageV
         TextView messageText;
         TextView timestampText;
         ImageButton fileButton;
+        LinearLayout messageContainer;
 
         MessageViewHolder(View itemView) {
             super(itemView);
+            messageContainer = itemView.findViewById(R.id.messageContainer);
             messageText = itemView.findViewById(R.id.messageText);
             timestampText = itemView.findViewById(R.id.timestampText);
             fileButton = itemView.findViewById(R.id.fileButton);
