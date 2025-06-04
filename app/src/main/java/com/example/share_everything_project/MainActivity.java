@@ -46,53 +46,52 @@ public class MainActivity extends AppCompatActivity {
     private ArrayList<String> conversationList;
     private String currentUsername;
     private ArrayAdapter<String> adapter;
+    private Toolbar toolbar;
+
+    private void initializeViews() {
+        // Initialize toolbar
+        toolbar = findViewById(R.id.mainToolbar);
+        setSupportActionBar(toolbar);
+        if (getSupportActionBar() != null) {
+            getSupportActionBar().setTitle("ShareHub Pro");
+        }
+
+        // Initialize ListView
+        conversationListView = findViewById(R.id.conversationListView);
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        // Set up toolbar
-        Toolbar toolbar = findViewById(R.id.mainToolbar);
-        setSupportActionBar(toolbar);
-        if (getSupportActionBar() != null) {
-            getSupportActionBar().setTitle("ShareHub Pro");
-        }
+        // Initialize views
+        initializeViews();
 
-        // Initialize lists and adapter first
-        conversationList = new ArrayList<>();
-        adapter = new ArrayAdapter<>(this, android.R.layout.simple_list_item_1, conversationList);
-        
-        // Set up ListView
-        conversationListView = findViewById(R.id.conversationListView);
-        conversationListView.setAdapter(adapter);
-
-        // Get username from intent or shared preferences
+        // Get username from intent
         currentUsername = getIntent().getStringExtra("username");
         if (currentUsername == null || currentUsername.isEmpty()) {
-            // Try to get username from shared preferences
-            SharedPreferences prefs = getSharedPreferences("ShareHubPrefs", MODE_PRIVATE);
-            currentUsername = prefs.getString("username", null);
-            
-            if (currentUsername == null || currentUsername.isEmpty()) {
-                // If still no username, redirect to login with the deep link data
-                Intent loginIntent = new Intent(this, LoginActivity.class);
-                // Pass the deep link data to LoginActivity
-                if (getIntent().getAction() != null && getIntent().getAction().equals(Intent.ACTION_VIEW)) {
-                    loginIntent.setData(getIntent().getData());
-                }
-                startActivity(loginIntent);
-                finish();
-                return;
-            }
+            Toast.makeText(this, "Error: No username provided", Toast.LENGTH_SHORT).show();
+            finish();
+            return;
         }
 
-        // Now that we have a valid username, load conversations
+        // Set up ListView and adapter
+        conversationList = new ArrayList<>();
+        adapter = new ArrayAdapter<>(this, android.R.layout.simple_list_item_1, conversationList);
+        conversationListView.setAdapter(adapter);
+
+        // Load saved conversations
         loadConversations();
 
+        // Set up click listeners
         setupClickListeners();
 
         // Handle deep link
+        handleDeepLink();
+    }
+
+    private void handleDeepLink() {
         Intent intent = getIntent();
         if (intent != null && intent.getAction() != null && 
             intent.getAction().equals(Intent.ACTION_VIEW)) {
@@ -151,8 +150,9 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void importContacts() {
-        Set<String> importedContacts = new HashSet<>();
-        Cursor cursor = getContentResolver().query(
+        try {
+            // Query for contacts with phone numbers
+            Cursor cursor = getContentResolver().query(
                 ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
                 new String[]{
                     ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
@@ -161,34 +161,63 @@ public class MainActivity extends AppCompatActivity {
                 null,
                 null,
                 ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME + " ASC"
-        );
+            );
 
-        if (cursor != null) {
-            while (cursor.moveToNext()) {
-                @SuppressLint("Range") String name = cursor.getString(cursor.getColumnIndex(
-                        ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME));
-                @SuppressLint("Range") String phoneNumber = cursor.getString(cursor.getColumnIndex(
-                        ContactsContract.CommonDataKinds.Phone.NUMBER));
-                importedContacts.add(name + "|" + phoneNumber);
+            if (cursor != null && cursor.moveToFirst()) {
+                // Get column indices
+                int nameColumnIndex = cursor.getColumnIndex(
+                    ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME);
+                int numberColumnIndex = cursor.getColumnIndex(
+                    ContactsContract.CommonDataKinds.Phone.NUMBER);
+
+                // Verify column indices are valid
+                if (nameColumnIndex < 0 || numberColumnIndex < 0) {
+                    Log.e("MainActivity", "Required columns not found in cursor");
+                    Toast.makeText(this, "Error: Could not access contact information", 
+                        Toast.LENGTH_SHORT).show();
+                    cursor.close();
+                    return;
+                }
+
+                do {
+                    String name = cursor.getString(nameColumnIndex);
+                    String phoneNumber = cursor.getString(numberColumnIndex);
+
+                    // Skip if either name or number is null
+                    if (name == null || phoneNumber == null) {
+                        continue;
+                    }
+
+                    // Format the contact string with phone number
+                    String contactEntry = name + "|" + phoneNumber;
+                    
+                    // Check if contact already exists
+                    if (!conversationList.contains(contactEntry)) {
+                        conversationList.add(contactEntry);
+                        Log.d("MainActivity", "Added contact: " + contactEntry);
+                    }
+                } while (cursor.moveToNext());
+
+                cursor.close();
+                
+                // Update UI
+                adapter.notifyDataSetChanged();
+                
+                // Save the updated conversations list
+                saveConversations();
+                
+                Toast.makeText(this, "Contacts imported successfully", Toast.LENGTH_SHORT).show();
+            } else {
+                if (cursor != null) {
+                    cursor.close();
+                }
+                Toast.makeText(this, "No contacts found", Toast.LENGTH_SHORT).show();
             }
-            cursor.close();
+        } catch (Exception e) {
+            Log.e("MainActivity", "Error importing contacts", e);
+            Toast.makeText(this, "Error importing contacts: " + e.getMessage(), 
+                Toast.LENGTH_SHORT).show();
         }
-
-        // Add imported contacts to conversations
-        for (String contact : importedContacts) {
-            if (!conversationList.contains(contact)) {
-                conversationList.add(contact);
-            }
-        }
-        
-        // Update UI
-        runOnUiThread(() -> {
-            adapter.notifyDataSetChanged();
-            Toast.makeText(this, "Contacts imported successfully", Toast.LENGTH_SHORT).show();
-        });
-
-        // Save conversations
-        saveConversations();
     }
 
     private void setupClickListeners() {
@@ -218,13 +247,15 @@ public class MainActivity extends AppCompatActivity {
         Log.d("MainActivity", "Adding user to conversations: " + username);
         
         // Check if already in conversations
-        if (conversationList.contains(username + "|app_user")) {
-            Toast.makeText(this, username + " is already in your conversations", Toast.LENGTH_SHORT).show();
+        String userEntry = username + "|app_user";
+        if (conversationList.contains(userEntry)) {
+            Toast.makeText(this, username + " is already in your conversations", 
+                Toast.LENGTH_SHORT).show();
             return;
         }
 
         // Add to conversations with app_user flag
-        conversationList.add(username + "|app_user");
+        conversationList.add(userEntry);
         
         // Update UI
         runOnUiThread(() -> {
@@ -238,71 +269,19 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void saveConversations() {
-        Log.d("MainActivity", "Saving conversations");
         SharedPreferences prefs = getSharedPreferences("ShareHubPrefs", MODE_PRIVATE);
-        Set<String> savedConversations = new HashSet<>(conversationList);
-        prefs.edit().putStringSet("conversations", savedConversations).apply();
-        Log.d("MainActivity", "Saved conversations size: " + savedConversations.size());
+        Set<String> conversationSet = new HashSet<>(conversationList);
+        prefs.edit().putStringSet("conversations", conversationSet).apply();
+        Log.d("MainActivity", "Saved " + conversationSet.size() + " conversations");
     }
 
     private void loadConversations() {
-        if (currentUsername == null || currentUsername.isEmpty()) {
-            Log.e("MainActivity", "Cannot load conversations: username is null or empty");
-            return;
-        }
-
-        Log.d("MainActivity", "Loading conversations for user: " + currentUsername);
-        new Thread(() -> {
-            try {
-                var client = SupabaseClientProvider.INSTANCE.getClient();
-                
-                // Fetch all conversations from Supabase
-                JSONArray response = SupabaseWrapper.fetchAllUserConversations(client, currentUsername);
-                Log.d("MainActivity", "Received conversations from Supabase: " + response.toString());
-                
-                // Process conversations and update UI
-                Set<String> uniqueConversations = new HashSet<>();
-                
-                // First, add existing conversations from the list
-                uniqueConversations.addAll(conversationList);
-                
-                // Then add conversations from Supabase
-                for (int i = 0; i < response.length(); i++) {
-                    try {
-                        JSONObject messageJson = response.getJSONObject(i);
-                        String sender = messageJson.getString("sender");
-                        String receiver = messageJson.getString("receiver");
-                        
-                        // Add the other user to conversations
-                        String otherUser = sender.equals(currentUsername) ? receiver : sender;
-                        uniqueConversations.add(otherUser + "|app_user");
-                        
-                        Log.d("MainActivity", String.format(
-                            "Processing conversation - Sender: %s, Receiver: %s, Other User: %s",
-                            sender, receiver, otherUser
-                        ));
-                    } catch (Exception e) {
-                        Log.e("MainActivity", "Error processing conversation: " + e.getMessage(), e);
-                    }
-                }
-                
-                // Update conversation list
-                conversationList.clear();
-                conversationList.addAll(uniqueConversations);
-                
-                // Update UI on main thread
-                runOnUiThread(() -> {
-                    adapter.notifyDataSetChanged();
-                    Log.d("MainActivity", "Loaded conversations size: " + conversationList.size());
-                });
-                
-            } catch (Exception e) {
-                Log.e("MainActivity", "Error loading conversations: " + e.getMessage(), e);
-                runOnUiThread(() -> 
-                    Toast.makeText(this, "Error loading conversations", Toast.LENGTH_SHORT).show()
-                );
-            }
-        }).start();
+        SharedPreferences prefs = getSharedPreferences("ShareHubPrefs", MODE_PRIVATE);
+        Set<String> savedConversations = prefs.getStringSet("conversations", new HashSet<>());
+        conversationList.clear();
+        conversationList.addAll(savedConversations);
+        adapter.notifyDataSetChanged();
+        Log.d("MainActivity", "Loaded " + conversationList.size() + " conversations");
     }
 
     private void showMyQRCode() {
