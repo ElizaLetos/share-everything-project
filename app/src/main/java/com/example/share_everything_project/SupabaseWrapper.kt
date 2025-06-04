@@ -1,6 +1,5 @@
 package com.example.share_everything_project
 
-import android.service.autofill.Validators.or
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.postgrest.query.Order
@@ -13,7 +12,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.runBlocking
-import kotlinx.serialization.json.*
 import org.json.JSONObject
 import org.json.JSONArray
 

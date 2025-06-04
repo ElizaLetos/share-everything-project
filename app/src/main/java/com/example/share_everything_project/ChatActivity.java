@@ -1,6 +1,5 @@
 package com.example.share_everything_project;
 
-import android.Manifest;
 import android.annotation.SuppressLint;
 import android.content.Intent;
 import android.database.Cursor;
@@ -27,7 +26,6 @@ import java.util.ArrayList;
 import org.json.JSONObject;
 
 public class ChatActivity extends AppCompatActivity {
-    private static final int PERMISSIONS_REQUEST_SEND_SMS = 200;
     private EditText messageEditText;
     private ImageButton sendButton;
     private ImageButton fileButton;
