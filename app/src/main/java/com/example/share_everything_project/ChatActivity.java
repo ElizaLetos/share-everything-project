@@ -296,8 +296,7 @@ public class ChatActivity extends AppCompatActivity {
                 
                 runOnUiThread(() -> {
                     Log.d("ChatActivity", "File uploaded and message sent to Supabase");
-                    // Prompt to share the file
-                    showShareFileDialog(fileUrl);
+                    Toast.makeText(this, "File sent successfully", Toast.LENGTH_SHORT).show();
                 });
             } catch (Exception e) {
                 runOnUiThread(() -> 
