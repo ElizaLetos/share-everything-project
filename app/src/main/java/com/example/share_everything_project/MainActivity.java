@@ -10,7 +10,6 @@ import android.graphics.Bitmap;
 import android.net.Uri;
 import android.os.Bundle;
 import android.provider.ContactsContract;
-import android.provider.OpenableColumns;
 import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -30,7 +29,6 @@ import androidx.appcompat.widget.Toolbar;
 
 import java.io.File;
 import java.io.FileOutputStream;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Set;
@@ -68,9 +66,6 @@ public class MainActivity extends AppCompatActivity {
         // Set up ListView
         conversationListView = findViewById(R.id.conversationListView);
         conversationListView.setAdapter(adapter);
-        
-        // Load saved conversations
-        loadConversations();
 
         // Get username from intent or shared preferences
         currentUsername = getIntent().getStringExtra("username");
@@ -91,6 +86,9 @@ public class MainActivity extends AppCompatActivity {
                 return;
             }
         }
+
+        // Now that we have a valid username, load conversations
+        loadConversations();
 
         setupClickListeners();
 
@@ -248,7 +246,12 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void loadConversations() {
-        Log.d("MainActivity", "Loading conversations");
+        if (currentUsername == null || currentUsername.isEmpty()) {
+            Log.e("MainActivity", "Cannot load conversations: username is null or empty");
+            return;
+        }
+
+        Log.d("MainActivity", "Loading conversations for user: " + currentUsername);
         new Thread(() -> {
             try {
                 var client = SupabaseClientProvider.INSTANCE.getClient();
@@ -260,6 +263,10 @@ public class MainActivity extends AppCompatActivity {
                 // Process conversations and update UI
                 Set<String> uniqueConversations = new HashSet<>();
                 
+                // First, add existing conversations from the list
+                uniqueConversations.addAll(conversationList);
+                
+                // Then add conversations from Supabase
                 for (int i = 0; i < response.length(); i++) {
                     try {
                         JSONObject messageJson = response.getJSONObject(i);
@@ -299,11 +306,19 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void showMyQRCode() {
-        // Create QR code content with deep link
-        String qrContent = "sharehubpro://user/" + currentUsername;
+        // Create QR code content as JSON
+        JSONObject qrData = new JSONObject();
+        try {
+            qrData.put("type", "contact_add");
+            qrData.put("username", currentUsername);
+        } catch (Exception e) {
+            Log.e("MainActivity", "Error creating QR data", e);
+            Toast.makeText(this, "Error creating QR code", Toast.LENGTH_SHORT).show();
+            return;
+        }
         
         // Generate QR code
-        Bitmap qrBitmap = QRUtils.generateQRCode(qrContent);
+        Bitmap qrBitmap = QRUtils.generateQRCode(qrData.toString());
         if (qrBitmap == null) {
             Toast.makeText(this, "Error generating QR code", Toast.LENGTH_SHORT).show();
             return;
@@ -389,15 +404,31 @@ public class MainActivity extends AppCompatActivity {
 
     private void handleScannedQRCode(String qrContent) {
         try {
-            JSONObject userInfo = new JSONObject(qrContent);
-            if ("contact_add".equals(userInfo.getString("type"))) {
-                String username = userInfo.getString("username");
-                // Add to conversations
-                addToConversations(username);
-            } else {
-                Toast.makeText(this, "Invalid QR code format", Toast.LENGTH_SHORT).show();
+            // First try to parse as JSON
+            try {
+                JSONObject userInfo = new JSONObject(qrContent);
+                if ("contact_add".equals(userInfo.getString("type"))) {
+                    String username = userInfo.getString("username");
+                    addToConversations(username);
+                    return;
+                }
+            } catch (Exception e) {
+                Log.d("MainActivity", "QR content is not in JSON format, trying deep link format");
             }
+
+            // If not JSON, try deep link format
+            if (qrContent.startsWith("sharehubpro://user/")) {
+                String username = qrContent.substring("sharehubpro://user/".length());
+                if (!username.isEmpty()) {
+                    addToConversations(username);
+                    return;
+                }
+            }
+
+            // If we get here, the QR code format is invalid
+            Toast.makeText(this, "Invalid QR code format", Toast.LENGTH_SHORT).show();
         } catch (Exception e) {
+            Log.e("MainActivity", "Error processing QR code", e);
             Toast.makeText(this, "Error processing QR code: " + e.getMessage(), Toast.LENGTH_SHORT).show();
         }
     }
