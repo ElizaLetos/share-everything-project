@@ -97,10 +97,14 @@ public class ChatActivity extends AppCompatActivity {
         Toolbar toolbar = findViewById(R.id.chatToolbar);
         setSupportActionBar(toolbar);
         if (getSupportActionBar() != null) {
-            getSupportActionBar().setTitle(otherUser);
-            getSupportActionBar().setDisplayHomeAsUpEnabled(true);
-            getSupportActionBar().setDisplayShowHomeEnabled(true);
+            getSupportActionBar().setTitle("");  // Clear the default title
+            getSupportActionBar().setDisplayHomeAsUpEnabled(false);  // Hide default back button
+            getSupportActionBar().setDisplayShowHomeEnabled(false);
         }
+        
+        // Set chat title
+        chatTitleText = findViewById(R.id.chatTitleText);
+        chatTitleText.setText(otherUser);
         
         // Initialize RecyclerView
         messageList = new ArrayList<>();
@@ -154,7 +158,6 @@ public class ChatActivity extends AppCompatActivity {
         // Toolbar and navigation components
         Toolbar toolbar = findViewById(R.id.chatToolbar);
         backButton = findViewById(R.id.backButton);
-        chatTitleText = findViewById(R.id.chatTitleText);
         
         // Message composing elements
         messageEditText = findViewById(R.id.messageEditText);
